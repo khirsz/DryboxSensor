@@ -10,20 +10,21 @@
 #define BAT_MIN_MV 3000
 #define BAT_ALARM_MV 3100
 
+#define BAT_LEVELS 4
+
 /// Misc definitions ///
 
 #define DISPLAY_OFF_TIME 10000
 #define HELLO_TIME 2000
 #define HUMIDITY_ALARM_LEVEL 30.0
 
-#define DEBUG
+//#define DEBUG
 
 /// Pin definitions ///
 
 // Button pin needs low pass filter for debuncing (100nF + 1KOhm), because it is used as an interrupt trigger
 #define BUTTON_PIN 2
 #define BUZZER_PIN 3
-#define BAT_PIN A0
 
 /// Sensor definitions ///
 
@@ -46,8 +47,20 @@ enum class SensorState : uint8_t { displayInit = 0,
                                    alarmOn,
                                    alarmOnBlink };
 
+enum class AlarmType : uint8_t { noAlarm = 0,
+                                 humidityAlarm,
+                                 batAlarm };
+
 volatile static bool buzzerOff = false;
 volatile SensorState state = SensorState::displayInit;
+
+struct DisplayData {
+  float humidity;
+  float temp;
+  long voltage;
+  bool hideHumidity;
+  bool hideBat;
+};
 
 /// Funcions ///
 
@@ -65,43 +78,74 @@ void displayTitle() {
   display.print(F("Drybox Sensor"));
 }
 
-void displayHumidity(const sensors_event_t& humidity, bool hideValue = false) {
+void displayHumidity(float humidity, bool hideValue = false) {
   display.setTextSize(2);
   display.setCursor(5, 18);
   display.print(F("Hum: "));
 
   if (!hideValue) {
-    display.print(humidity.relative_humidity, 1);
-    display.print(F("%"));
+    display.print(humidity, 1);
+    display.print("%");
   }
 }
 
-void displayTemp(const sensors_event_t& temp) {
-  display.setTextSize(2);
-  display.setCursor(5, 48);
-  display.print(F("Tmp: "));
-  display.print(temp.temperature, 1);
-  display.print(F("C"));
+void displayTemp(float temp) {
+  display.setTextSize(1);
+  display.setCursor(0, 48);
+  display.print(F("T: "));
+  display.print(temp, 1);
+  display.print("C");
 }
 
-void displayMainScreen(const sensors_event_t& humidity, const sensors_event_t& temp, bool hideValue = false) {
+void displayBat(int voltage, bool hideValue = false) {
+  display.setTextSize(1);
+  display.setCursor(62, 48);
+  display.print(F("Bat: "));
+
+  if (!hideValue) {
+    display.print("[");
+    auto level = calculateBatLevel(voltage);
+    for (auto i = 0; i < BAT_LEVELS; i++) {
+      if (i <= level) {
+        display.print("#");
+      } else {
+        display.print(" ");
+      }
+    }
+    display.print("]");
+  }
+}
+
+void displayMainScreen(const DisplayData& displayData) {
   display.clearDisplay();
   displayTitle();
-  displayHumidity(humidity, hideValue);
-  displayTemp(temp);
+  displayHumidity(displayData.humidity, displayData.hideHumidity);
+  displayTemp(displayData.temp);
+  displayBat(displayData.voltage, displayData.hideBat);
   display.display();
+}
+
+int calculateBatLevel(long voltage) {
+  int level = map(voltage, BAT_MIN_MV, BAT_MAX_MV, 0, BAT_LEVELS);
+  return (level < BAT_LEVELS) ? level : (BAT_LEVELS - 1);
+}
+
+void initAlarm() {
+  display.ssd1306_command(SSD1306_DISPLAYON);
+  buzzerOff = false;
+  state = SensorState::alarmOn;
 }
 
 void buttonInterrupt() {
   if (state >= SensorState::alarmOn) {
     buzzerOff = true;
 #ifdef DEBUG
-    Serial.println("ISR: Buzzer off");
+    Serial.println(F("ISR: Buzzer off"));
 #endif
   } else {
     state = SensorState::displayInit;
 #ifdef DEBUG
-    Serial.println("ISR: Display init");
+    Serial.println(F("ISR: Display init"));
 #endif
   }
 }
@@ -123,13 +167,13 @@ long readVcc() {
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("DryBox Humidity sensor");
+  Serial.println(F("DryBox Humidity sensor"));
 
   if (!aht.begin()) {
-    Serial.println("Could not find AHT? Check wiring");
+    Serial.println(F("Could not find AHT? Check wiring"));
     while (1) delay(500);
   }
-  Serial.println("AHT10 or AHT20 found");
+  Serial.println(F("AHT10 or AHT20 found"));
 
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(BUZZER_PIN, LOW);
@@ -148,19 +192,23 @@ void setup() {
 
 void loop() {
   static unsigned long displayOnTimeStamp;
+  static AlarmType alarmType = AlarmType::noAlarm;
 
   auto vcc = readVcc();
   sensors_event_t humidity, temp;
   aht.getEvent(&humidity, &temp);  // populate temp and humidity objects with fresh data
-#ifdef DEBUG
-  /*Serial.print("Temperature: ");
-  Serial.print(temp.temperature);
-  Serial.println(" degrees C");
-  Serial.print("Humidity: ");
-  Serial.print(humidity.relative_humidity);
-  Serial.println("% rH");*/
 
-  Serial.print("State: ");
+  DisplayData displayData{ humidity.relative_humidity, temp.temperature, vcc, false, false };
+
+#ifdef DEBUG
+  /*Serial.print(F("Temperature: "));
+  Serial.print(temp.temperature);
+  Serial.println(F(" degrees C"));
+  Serial.print(F("Humidity: "));
+  Serial.print(humidity.relative_humidity);
+  Serial.println(F("% rH"));*/
+
+  Serial.print(F("State: "));
   Serial.println(static_cast<uint8_t>(state));
 #endif
 
@@ -172,7 +220,7 @@ void loop() {
       break;
 
     case SensorState::displayOn:
-      displayMainScreen(humidity, temp);
+      displayMainScreen(displayData);
       if (millis() - displayOnTimeStamp > DISPLAY_OFF_TIME) {
         display.ssd1306_command(SSD1306_DISPLAYOFF);
         state = SensorState::lowPower;
@@ -186,16 +234,18 @@ void loop() {
 
     case SensorState::alarmCheck:
       if (humidity.relative_humidity > HUMIDITY_ALARM_LEVEL) {
-        display.ssd1306_command(SSD1306_DISPLAYON);
-        buzzerOff = false;
-        state = SensorState::alarmOn;
+        initAlarm();
+        alarmType = AlarmType::humidityAlarm;
+      } else if (vcc < BAT_ALARM_MV) {
+        initAlarm();
+        alarmType = AlarmType::batAlarm;
       } else {
         state = SensorState::lowPower;
       }
       break;
 
     case SensorState::alarmOn:
-      displayMainScreen(humidity, temp);
+      displayMainScreen(displayData);
       if (!buzzerOff) {
         digitalWrite(BUZZER_PIN, HIGH);
       }
@@ -203,18 +253,21 @@ void loop() {
       break;
 
     case SensorState::alarmOnBlink:
-      displayMainScreen(humidity, temp, true);
+      displayData.hideHumidity = (alarmType == AlarmType::humidityAlarm) ? true : false;
+      displayData.hideBat = (alarmType == AlarmType::batAlarm) ? true : false;
+      displayMainScreen(displayData);
       digitalWrite(BUZZER_PIN, LOW);
       state = SensorState::alarmOn;
       break;
   }
 
 #ifdef DEBUG
-  Serial.print("Vcc value: ");
+  Serial.print(F("Vcc value: "));
   Serial.print(vcc);
-  Serial.println("mV");
+  Serial.println(F("mV"));
 
-  Serial.println(map(vcc, BAT_MIN_MV, BAT_MAX_MV, 0, 4) * 25);
+  Serial.print(F("Bat level: "));
+  Serial.println(calculateBatLevel(vcc));
 #endif
 
   delay(1000);
