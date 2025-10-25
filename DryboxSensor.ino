@@ -64,6 +64,15 @@ struct DisplayData {
 
 /// Funcions ///
 
+void displayError(const char* msg) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setCursor(0, 25);
+  display.print(F("Error: "));
+  display.print(msg);
+  display.display();
+}
+
 void displayLogo() {
   display.setCursor(9, 25);
   display.print(F("DryBox Sensor V1.0"));
@@ -166,14 +175,10 @@ long readVcc() {
 /// Setup ///
 
 void setup() {
+#ifdef DEBUG
   Serial.begin(115200);
   Serial.println(F("DryBox Humidity sensor"));
-
-  if (!aht.begin()) {
-    Serial.println(F("Could not find AHT? Check wiring"));
-    while (1) delay(500);
-  }
-  Serial.println(F("AHT10 or AHT20 found"));
+#endif
 
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(BUZZER_PIN, LOW);
@@ -186,6 +191,17 @@ void setup() {
   display.setTextColor(WHITE);
 
   displayLogo();
+
+  if (!aht.begin()) {
+#ifdef DEBUG
+    Serial.println(F("Could not find AHT? Check wiring"));
+#endif
+    displayError("AHT not found!");
+    while (1) { delay(500); };
+  }
+#ifdef DEBUG
+  Serial.println(F("AHT10 or AHT20 found"));
+#endif
 }
 
 /// Main loop ///
