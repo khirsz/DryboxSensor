@@ -4,27 +4,27 @@
 
 /// Battery definitions ///
 
-#define INTERNAL_VREF_MV 1100L  // Needs to be calibrated
+static constexpr auto INTERNAL_VREF_MV = 1100L;  // Needs to be calibrated
 
-#define BAT_MAX_MV 3800
-#define BAT_MIN_MV 3000
-#define BAT_ALARM_MV 3100
+static constexpr auto BAT_MAX_MV = 3800L;
+static constexpr auto BAT_MIN_MV = 3000L;
+static constexpr auto BAT_ALARM_MV = 3100L;
 
-#define BAT_LEVELS 4
+static constexpr auto BAT_LEVELS = 4;
 
 /// Misc definitions ///
 
-#define DISPLAY_OFF_TIME 10000
-#define HELLO_TIME 2000
-#define HUMIDITY_ALARM_LEVEL 30.0
+static constexpr auto DISPLAY_OFF_TIME = 10000UL;
+static constexpr auto HELLO_TIME = 2000UL;
+static constexpr auto HUMIDITY_ALARM_LEVEL = 30.0f;
 
 //#define DEBUG
 
 /// Pin definitions ///
 
 // Button pin needs low pass filter for debuncing (100nF + 1KOhm), because it is used as an interrupt trigger
-#define BUTTON_PIN 2
-#define BUZZER_PIN 3
+static constexpr auto BUTTON_PIN = 2;
+static constexpr auto BUZZER_PIN = 3;
 
 /// Sensor definitions ///
 
@@ -32,11 +32,11 @@ Adafruit_AHTX0 aht;
 
 /// OLED definitions ///
 
-#define SCREEN_WIDTH 128  // OLED display width, in pixels
-#define SCREEN_HEIGHT 64  // OLED display height, in pixels
+static constexpr auto SCREEN_WIDTH = 128;  // OLED display width, in pixels
+static constexpr auto SCREEN_HEIGHT = 64;  // OLED display height, in pixels
 
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
-#define OLED_RESET -1  // Reset pin # (-1 if sharing Arduino reset pin)
+static constexpr auto OLED_RESET = -1;  // Reset pin # (-1 if sharing Arduino reset pin)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 /// State machine definitions ///
