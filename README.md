@@ -8,3 +8,5 @@ Sensor most of the time works in low power mode. If hight humidity or low power 
 To improve power efficiency of the system desolder Arduino power LED and add 200Ohm resistor in series on negative side of active buzzer.
 
 Check housing directory for 3D printed case project designed in FreeCad.
+
+![Alt text](Housing/humidity_sensor.jpeg?raw=true "Housing")
